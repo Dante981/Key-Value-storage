@@ -1,5 +1,6 @@
 import socket
 import threading
+import re
 import logging
 
 
@@ -10,11 +11,17 @@ logger = logging.getLogger(__name__)
 
 class Server:
 
-    def __init__(self, host, port):
+    def __init__(self, host, port, sv_listen:int = 10, cl_timeout:int = 60, cl_recv:int = 1024):
         self.server_address = (host, port)
         self.server_sock = None
+        self.sv_listen = sv_listen
         self.is_running = False
-        #self.clients_sock = dict()
+
+
+        self.clients_sock = dict()
+
+        self.cl_timeout = cl_timeout
+        self.cl_recv = cl_recv
 
 
     def start(self):
@@ -29,9 +36,8 @@ class Server:
             while self.is_running:
                 try:
                     client_sock, client_address = self.server_sock.accept()
-                    client_sock.settimeout(60)
-                    #if client_address not in self.clients_sock:
-                        #self.clients_sock[client_address] = client_sock
+                    self.clients_sock[client_address] = client_sock
+                    client_sock.settimeout(self.cl_timeout)
 
                     client_thread = threading.Thread(
                         target=self.handle_client,
@@ -59,12 +65,17 @@ class Server:
         try:
             logger.info(f'Processing client {client_address}')
             while True:
-                data = client_sock.recv(1024)
+                data = client_sock.recv(self.cl_recv)
                 if not data:
                     break
-                logger.info(f'Received from {client_address}: {data.decode('utf-8')}')
-                client_sock.sendall(f'PONG: {data.decode('utf-8')}'.encode('utf-8'))
-        
+                try:
+                    data_dec = data.decode('utf-8')
+                    data_enc = self.pars_client_send(data_dec).encode('utf-8')
+                    logger.info(f'Received from {client_address}: {data_dec}')
+                    client_sock.send(data_enc)
+                    
+                except Exception as e:
+                    logger.error(f'Code err: {e}')
         except ConnectionResetError:
             logger.error(f"{client_address} disconnect")
         except socket.timeout:
@@ -82,6 +93,21 @@ class Server:
         if self.server_sock:
             self.server_sock.close
             logger.info(f'Server close {self.server_address[0]}:{self.server_address[1]}')
+    
+
+    def pars_client_send(self, data:str) -> str:
+        ans = ''
+        data_ls = [re.sub(r'\s','',x) for x in data.split(' ')]
+        print(data_ls)
+        if len(data_ls) > 0:
+            if data_ls[0].lower() == 'ping':
+                ans = self.ping()
+        return ans
+
+    
+    
+    def ping(self):
+        return 'PONG\r\n'
 
 
 
