@@ -51,7 +51,7 @@ class Server:
                     continue
                 except OSError as e:
                     if self.is_running:
-                        logger.error(f'er connect: {s}')
+                        logger.error(f'er connect: {e}')
                         break
         except KeyboardInterrupt:
             logger.info('server off')
@@ -91,7 +91,7 @@ class Server:
     def stop(self):
         self.is_running = False
         if self.server_sock:
-            self.server_sock.close
+            self.server_sock.close()
             logger.info(f'Server close {self.server_address[0]}:{self.server_address[1]}')
     
 
