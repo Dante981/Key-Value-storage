@@ -3,10 +3,15 @@ import json
 import re
 import logging
 import time
+from io import BytesIO
+from collections import namedtuple
+
+
+import ProtocolHandler
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
-
+Error = namedtuple('Error',('message',))
     
 
 class Server:
@@ -16,12 +21,21 @@ class Server:
         self.server = None
         self.is_running = False
         self.key_ttl = key_ttl
-
+        self.REST = ProtocolHandler.ProtocolHandler()
         self.storage = dict()
         self.ttl_key = dict()
 
 
         self.clients_sock = []
+
+        self.commands = {
+            "GET": self._get,
+            "SET": self._set,
+            "DELETE": self._delete,
+            "FLUSH": self._flush,
+            "MGET": self._mget,
+            "MSET": self._mset,
+        }
 
         self.cl_timeout = cl_timeout
         self.cl_recv = cl_recv
@@ -56,23 +70,26 @@ class Server:
                 
             self.clients_sock.append(writer)
 
-            welcome_message = {
-                'type':'system',
-                'content':'connected'
-                }
-            writer.write(json.dumps(welcome_message).encode('utf-8'))
-            await writer.drain()
-
             try:
-                while True:    
-                    data =  await reader.read(self.cl_recv)
+                while True:   
+
+
+                    data =  await reader.read(1024)
+                    logger.info(f'Received from {client_addr!r}: {data!r}')
+                    #data = await self.REST.handle_request(reader)
+                    logger.info(f'data {data}')
                     if not data:
                         break
-                    data_dec = data.decode('utf-8').strip()
-                    data_enc = self.pars_client_send(data_dec).encode('utf-8')
-                    logger.info(f'Received from {client_addr!r}: {data_dec!r}')
-                    writer.write(data_enc)
-                    await writer.drain()
+
+                    buf = BytesIO(data)
+                    
+
+                    data = self.REST.handle_request(buf)
+                    logger.info(f'Received from {client_addr!r}: {data!r}')
+                    
+                    resp = self.get_response(data)
+                    print(resp)
+                    await self.REST.write_response(writer,resp)
 
             except asyncio.CancelledError:
                 pass
@@ -91,32 +108,15 @@ class Server:
         if self.server:
             self.server.close()
             logger.info(f'Server close {self.server_address[0]}:{self.server_address[1]}')
+
     
-
-    def pars_client_send(self, data:str) -> str:
-        ans = ''
-        data_ls = [re.sub(r'\s','',x) for x in data.split(' ')]
-
-        if len(data_ls) == 1:
-            if data_ls[0].lower() == 'ping':
-                ans = self.ping()
-        elif len(data_ls) == 3:       
-            if data_ls[0].lower() == 'set':
-                key = data_ls[1]
-                val = data_ls[2]
-                self.set_key_storage(key,val)
-        elif len(data_ls) == 2:
-            if data_ls[0].lower() == 'get':
-                ans = self.get_key_storage(data_ls[1])
-                
-        return ans
-
     async def ttl_check(self):       
         while self.is_running:
             try:
                 current_time = asyncio.get_event_loop().time()
                 del_keys = []
                 for key, timestart in self.ttl_key.items():
+                    #print(key, current_time - timestart)
                     if current_time - timestart >= self.key_ttl:
                         del_keys.append(key)
 
@@ -127,6 +127,61 @@ class Server:
             except Exception as e:
                 logger.error(f'TTL check error: {e}')
             await asyncio.sleep(0.5)
+
+    
+    def get_response(self, data):
+        if not isinstance(data, list):
+            try:
+                data = data.split()
+            except:
+                logger.error('Request must be list or simple string')
+                raise TypeError('Request must be list or simple string')
+
+        if not data:
+            logger.error('Missing command')
+            raise TypeError('Missing command')
+
+        print(data)
+
+        command = data[0].upper().decode('utf-8')
+        if command not in self.commands:
+            logger.error('Unrecognized command: %s' % command)
+            raise TypeError('Unrecognized command: %s' % command)
+
+        return self.commands[command](*data[1:])
+
+    def _get(self, key):
+        return self.storage[key]
+
+    def _set(self, key, value):
+        time_ttl = asyncio.get_event_loop().time()
+        self.storage[key] = value
+        self.ttl_key[key] = time_ttl
+        return 1
+    
+    def _delete(self, key):
+        if key in self.storage:
+            del self.storage[key]
+            del self.ttl_key[key]
+            return 1
+        return 0
+
+    def _flush(self):
+        stlen = len(self.storage)
+        self.storage.clear()
+        self.ttl_key.clear()
+        return stlen
+
+    def _mget(self, *keys):
+        return [self.storage.get(key) for key in keys]
+
+    def _mset(self, *items):
+        time_ttl = asyncio.get_event_loop().time()
+        data = zip(items[::2], items[1::2])
+        for key, value in data:
+            self.storage[key] = value
+            self.ttl_check[key] = time_ttl
+        return len(data)
 
             
             
@@ -139,13 +194,16 @@ class Server:
         self.ttl_key[key] = time_start
 
 
-    def get_key_storage(self,key):
+    def get_key_storage(self,key) -> str:
         if key in self.storage:
-            return f'key:{key} val:{self.storage[key]} ttl:{time.time() - self.ttl_key[key]} \r\n'
+            return f'key:{key} val:{self.storage[key]} ttl:{asyncio.get_event_loop().time() - self.ttl_key[key]} \r\n'
         return 'key not found\r\n'
 
-    def ping(self):
-        return 'PONG\r\n'
+    def echo(self, message:str) -> str:
+        return f'{message}\r\n'
+
+    def ping(self) -> str:
+        return b'+PONG\r\n'
 
 
 
