@@ -8,11 +8,15 @@ class Client:
     
     def __init__(self, host='localhost', port=8889):
 
+        self.host = host
+        self.port = port
         self.protocol = ProtocolHandler()
         self.cl_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.cl_socket.connect((host,port))
-        self.fh = self.cl_socket.makefile('rwb')
+        self.fh = None
 
+    def connect(self):
+        self.cl_socket.connect((self.host,self.port))
+        self.fh = self.cl_socket.makefile('rwb')
 
     def execute(self, *args):
         self.protocol.write_response_noasync(self.fh, args)

@@ -172,8 +172,6 @@ class Server:
         return [self.storage.get(key) for key in keys]
 
     def _mset(self, *items):
-        
-        
         time_ttl = asyncio.get_event_loop().time()
         data = zip(items[::2], items[1::2])
 
@@ -184,26 +182,6 @@ class Server:
         return len(list(data))
 
             
-            
-
-
-    
-    def set_key_storage(self, key, value):
-        time_start = asyncio.get_event_loop().time()
-        self.storage[key] = value
-        self.ttl_key[key] = time_start
-        
-
-    def get_key_storage(self,key) -> str:
-        if key in self.storage:
-            return f'key:{key} val:{self.storage[key]} ttl:{asyncio.get_event_loop().time() - self.ttl_key[key]} \r\n'
-        return 'key not found\r\n'
-
-    def echo(self, message:str) -> str:
-        return f'{message}\r\n'
-
-    def ping(self) -> str:
-        return b'+PONG\r\n'
 
 
 
