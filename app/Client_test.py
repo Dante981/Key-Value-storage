@@ -29,9 +29,6 @@ async def test_clien():
     cl.mget(k2,k3,k4)
 
 
-async def clients():
-    client1_task = asyncio.create_task(test_clien())
-    client2_task = asyncio.create_task(test_clien())
 
 async def main():
     for i in range(1000):
