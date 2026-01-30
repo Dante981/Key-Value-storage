@@ -5,9 +5,7 @@ import logging
 import time
 from io import BytesIO
 from collections import namedtuple
-
-
-import ProtocolHandler
+from ProtocolHandler import ProtocolHandler
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -21,7 +19,7 @@ class Server:
         self.server = None
         self.is_running = False
         self.key_ttl = key_ttl
-        self.REST = ProtocolHandler.ProtocolHandler()
+        self.REST = ProtocolHandler()
         self.storage = dict()
         self.ttl_key = dict()
 
@@ -76,7 +74,6 @@ class Server:
 
                     data =  await reader.read(1024)
                     logger.info(f'Received from {client_addr!r}: {data!r}')
-                    #data = await self.REST.handle_request(reader)
                     logger.info(f'data {data}')
                     if not data:
                         break
@@ -88,7 +85,7 @@ class Server:
                     logger.info(f'Received from {client_addr!r}: {data!r}')
                     
                     resp = self.get_response(data)
-                    print(resp)
+
                     await self.REST.write_response(writer,resp)
 
             except asyncio.CancelledError:
@@ -141,9 +138,8 @@ class Server:
             logger.error('Missing command')
             raise TypeError('Missing command')
 
-        print(data)
 
-        command = data[0].upper().decode('utf-8')
+        command = data[0].upper()
         if command not in self.commands:
             logger.error('Unrecognized command: %s' % command)
             raise TypeError('Unrecognized command: %s' % command)
@@ -176,12 +172,16 @@ class Server:
         return [self.storage.get(key) for key in keys]
 
     def _mset(self, *items):
+        
+        
         time_ttl = asyncio.get_event_loop().time()
         data = zip(items[::2], items[1::2])
+
         for key, value in data:
+            print(key,value)
             self.storage[key] = value
-            self.ttl_check[key] = time_ttl
-        return len(data)
+            self.ttl_key[key] = time_ttl
+        return len(list(data))
 
             
             
@@ -192,7 +192,7 @@ class Server:
         time_start = asyncio.get_event_loop().time()
         self.storage[key] = value
         self.ttl_key[key] = time_start
-
+        
 
     def get_key_storage(self,key) -> str:
         if key in self.storage:

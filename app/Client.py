@@ -19,7 +19,7 @@ class Client:
         resp =  self.protocol.handle_request(self.fh)
         if isinstance(resp, Error):
             raise TypeError(resp.message)
-        return 1
+        return resp
 
     def get(self, key):
         return  self.execute('GET', key)

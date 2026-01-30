@@ -35,7 +35,7 @@ class ProtocolHandler():
     def handle_simple_string(self, reader):
         data =  reader.readline()
         ans = data.rstrip(b'\r\n')
-        return  ans
+        return  ans.decode('utf-8')
 
     def handle_error(self, reader):
         data =  reader.readline()
@@ -57,7 +57,7 @@ class ProtocolHandler():
         lenght += 2
         l_data =  reader.read(lenght)
         l_data = l_data[:-2]
-        return l_data
+        return l_data.decode('utf-8')
 
     def handle_array(self, reader):
         data =  reader.readline()
